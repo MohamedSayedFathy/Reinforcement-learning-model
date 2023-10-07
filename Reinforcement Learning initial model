@@ -1,0 +1,97 @@
+
+import subprocess
+import time
+import random
+#crareting the initially empty list for Q-table with each step reprsinting a tempreature value which is the state of our Q-table .
+def create_half_step_list(start, end):
+    num_steps = abs(end - start) * 2 +1
+    half_step_list = [[0, 0] for _ in range(num_steps)]
+
+    return half_step_list
+start_pos = 30
+end_pos = 70
+Q_table = create_half_step_list(start_pos, end_pos)
+#print(result)
+
+
+#Getting the current position in our enviroment using temp
+def current_pos():
+    CPU_TEMP_Command = "cat /sys/devices/virtual/thermal/thermal_zone2/temp"
+    CPU_Temp = int(subprocess.check_output(CPU_TEMP_Command, shell=True))
+    temp = CPU_Temp / 1000
+    return temp * 2 - 2
+
+FreqSym = ["102 MHz", "204 MHz", "307 MHz", "403 MHz", "518 MHz", "614 MHz", "710 MHz", "826 MHz", "922 MHz",
+        "1.04 GHz", "1.13 GHz", "1.22 GHz", "1.33 GHz", "1.43 GHz", "1.48 GHz"]
+Freq = ["102000", "204000", "307000", "403000", "518000", "614000", "710000", "826000", "922000",
+                     "1040000", "1130000", "1220000", "1330000", "1430000", "1480000"]
+
+#To check the current Freq we are using
+def check_curr_freq():
+
+    CPU_FREQ_Check_Command="cpufreq-info | grep 'current CPU frequency'"
+    num=subprocess.check_output(CPU_FREQ_Check_Command, shell=True)
+    cur_freq_value = num.decode('utf-8').split()[4]+" "+ num.decode('utf-8').split()[5]
+   # cur_freq_value = cur_freq_value[:-1]
+    return FreqSym.index(cur_freq_value)
+
+def action(freq_update):
+    CurrentFreq = check_curr_freq()
+    if freq_update == 0 :
+        if(CurrentFreq != 0):
+             CPU_FREQ_Command = ["sudo", "bash", "-c", f"echo {Freq[CurrentFreq]} > /sys/devices/system/cpu/cpu0/cpufreq/scaling_setspeed"]
+             subprocess.run(CPU_FREQ_Command)
+    if freq_update ==1 :
+        if(CurrentFreq!=14):
+             CPU_FREQ_Command = ["sudo", "bash", "-c", f"echo {Freq[CurrentFreq]} > /sys/devices/system/cpu/cpu0/cpufreq/scaling_setspeed"]
+             subprocess.run(CPU_FREQ_Command)
+
+#calculate the reward
+def reward_cal():
+     CPU_TEMP_Command = "cat /sys/devices/virtual/thermal/thermal_zone2/temp"
+     CPU_Temp = int(subprocess.check_output(CPU_TEMP_Command, shell=True))
+     if CPU_Temp > 42 :
+         reward =-10
+     else:
+         reward =0
+     return reward 
+             
+      
+
+discount = 0.1
+learning_rate = 0.1
+old_action=1
+
+for iteration in range(10):
+
+    CurrentFreq= check_curr_freq()
+    print("Iteration:", iteration)
+    cur_pos =int( current_pos())
+   # print(cur_pos)
+    rand_action=random.randint(0, 1)
+    if(rand_action == 0 ) :
+        if( CurrentFreq!=0):
+            CurrentFreq=CurrentFreq - 1
+    else :
+        if( CurrentFreq!=14):
+            CurrentFreq=CurrentFreq + 1
+
+    CPU_FREQ_Command = ["sudo", "bash", "-c", f"echo {Freq[CurrentFreq]} > /sys/devices/system/cpu/cpu0/cpufreq/scaling_setspeed"]
+    subprocess.run(CPU_FREQ_Command)
+   # action(rand_action)
+    time.sleep(1)
+    next_pos =int( current_pos())
+   # print(next_pos)
+    reward=reward_cal()
+    print(old_action)
+
+    CPU_FREQ_Check_Command="cpufreq-info | grep 'current CPU frequency'"
+    num=subprocess.check_output(CPU_FREQ_Check_Command, shell=True)
+    cur_freq_value = num.decode('utf-8').split()[4]+" "+ num.decode('utf-8').split()[5]
+    cur_freq_value = cur_freq_value[:-1]
+    print(cur_freq_value)
+    print(Q_table)
+    Q_table[cur_pos][rand_action]=Q_table[cur_pos][old_action] + learning_rate * (reward+discount*max(Q_table[next_pos])-Q_table[cur_pos][old_action])
+    old_action=rand_action
+print(Q_table)
+print("end")
